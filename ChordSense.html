@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ChordSense — Chord of the Day</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+<style>
+  :root{
+    --accent: #7C3AED;
+    --accent-strong: #6D28D9;
+    --accent-tint: #F3EEFE;
+    --accent-glow: rgba(124, 58, 237, 0.45);
+
+    --ink: #0F0A23;
+    --ink-2: #2B2440;
+    --ink-3: #6B6580;
+    --line: rgba(15, 10, 35, 0.08);
+
+    --bg: #FFFFFF;
+    --surface: #FFFFFF;
+    --surface-2: #F6F4FB;
+
+    --font-display: 'Geist', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --font-ui: 'Geist', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  }
+
+  html, body { margin: 0; padding: 0; }
+  body{
+    background: #ECEAF2;
+    background-image:
+      radial-gradient(1200px 600px at 50% -10%, #F3EEFE 0%, transparent 60%),
+      linear-gradient(180deg, #F1EEF7, #E8E5EF);
+    min-height: 100vh;
+    font-family: var(--font-ui);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+  *{ box-sizing: border-box; }
+
+  .app-screen, .app-screen * { font-family: var(--font-ui); }
+
+  .stage{
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 40px 20px;
+  }
+
+  /* Shuffle/page transitions */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeOut {
+    from { opacity: 1; transform: translateY(0); }
+    to   { opacity: 0; transform: translateY(-6px); }
+  }
+  .anim-in  { animation: fadeIn 280ms cubic-bezier(.32,.72,.2,1) both; }
+  .anim-out { animation: fadeOut 180ms ease both; }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .anim-slide { animation: slideUp 320ms cubic-bezier(.32,.72,.2,1) both; }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+
+<body>
+  <div id="root" class="stage"></div>
+
+  <script type="text/babel" src="ios-frame.jsx"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="chord-data.jsx"></script>
+  <script type="text/babel" src="chord-diagram.jsx"></script>
+  <script type="text/babel" src="screens.jsx"></script>
+
+  <script type="text/babel">
+    const { useState, useMemo, useCallback, useEffect, useRef } = React;
+
+    const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+      "layout": "classic"
+    }/*EDITMODE-END*/;
+
+    function App() {
+      const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+      const [tab, setTab] = useState('home');                  // 'home' | 'saved'
+      const [detail, setDetail] = useState(null);              // chord name or null
+      const [dailyIdx, setDailyIdx] = useState(0);             // index into DAILY_ENTRIES
+      const [shuffleKey, setShuffleKey] = useState(0);         // forces re-mount for animation
+      const [favs, toggleFav] = useFavorites();
+      const streak = useStreak();
+
+      const today = DAILY_ENTRIES[dailyIdx];
+      const chord = CHORDS[today.chord];
+
+      const Layout = useMemo(() => {
+        if (tweaks.layout === 'editorial') return LayoutEditorial;
+        if (tweaks.layout === 'card') return LayoutCard;
+        return LayoutClassic;
+      }, [tweaks.layout]);
+
+      const screenBg = tweaks.layout === 'card' ? 'var(--surface-2)' : '#FFFFFF';
+
+      const shuffle = useCallback(() => {
+        // Pick a different daily entry index
+        let next = dailyIdx;
+        while (next === dailyIdx && DAILY_ENTRIES.length > 1) {
+          next = Math.floor(Math.random() * DAILY_ENTRIES.length);
+        }
+        setDailyIdx(next);
+        setShuffleKey((k) => k + 1);
+      }, [dailyIdx]);
+
+      const tryAnotherFromDetail = useCallback(() => {
+        const names = Object.keys(CHORDS).filter((n) => n !== detail);
+        const next = names[Math.floor(Math.random() * names.length)];
+        setDetail(next);
+      }, [detail]);
+
+      // When tab switches to saved, close any detail.
+      useEffect(() => { if (tab !== 'home') setDetail(null); }, [tab]);
+
+      return (
+        <>
+          <IOSDevice width={402} height={874} dark={false}>
+            <div className="app-screen" style={{ position: 'absolute', inset: 0 }}>
+              {/* HOME or SAVED screen */}
+              {tab === 'home' && !detail && (
+                <div
+                  data-screen-label="01 Home"
+                  key={`home-${shuffleKey}`}
+                  className="anim-in"
+                  style={{
+                    position: 'absolute', inset: 0,
+                    background: screenBg,
+                    paddingTop: 54,
+                    paddingBottom: 70,
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div style={{ height: '100%', overflowY: 'auto' }}>
+                    <Layout
+                      today={today}
+                      chord={chord}
+                      onOpen={(name) => setDetail(name)}
+                      onShuffle={shuffle}
+                      favs={favs}
+                      toggleFav={toggleFav}
+                      streak={streak}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {tab === 'saved' && !detail && (
+                <div className="anim-in" style={{ position: 'absolute', inset: 0, paddingBottom: 70 }}>
+                  <SavedScreen
+                    favs={favs}
+                    toggleFav={toggleFav}
+                    onOpen={(name) => setDetail(name)}
+                    onShuffle={() => { setTab('home'); shuffle(); }}
+                  />
+                </div>
+              )}
+
+              {/* DETAIL — overlays the active tab */}
+              {detail && (
+                <div className="anim-slide" style={{ position: 'absolute', inset: 0, zIndex: 5 }}>
+                  <ChordDetailScreen
+                    chordName={detail}
+                    onBack={() => setDetail(null)}
+                    onTryAnother={tryAnotherFromDetail}
+                    favs={favs}
+                    toggleFav={toggleFav}
+                  />
+                </div>
+              )}
+
+              {/* Bottom nav (hidden when detail is open for focus) */}
+              {!detail && <BottomNav tab={tab} onTab={setTab} />}
+            </div>
+          </IOSDevice>
+
+          <TweaksPanel title="ChordSense Tweaks">
+            <TweakSection label="Home Layout" />
+            <TweakRadio
+              label="Variant"
+              value={tweaks.layout}
+              options={[
+                { value: 'classic',   label: 'Classic' },
+                { value: 'editorial', label: 'Editorial' },
+                { value: 'card',      label: 'Card' },
+              ]}
+              onChange={(v) => setTweak('layout', v)}
+            />
+            <div style={{ fontSize: 11, color: 'rgba(41,38,27,.55)', lineHeight: 1.45, padding: '4px 0' }}>
+              <div><b style={{ color: '#29261b' }}>Classic</b> — minimal iOS, single column.</div>
+              <div style={{ marginTop: 4 }}><b style={{ color: '#29261b' }}>Editorial</b> — purple hero with overlapping diagram card.</div>
+              <div style={{ marginTop: 4 }}><b style={{ color: '#29261b' }}>Card</b> — sectioned cards on a tinted surface.</div>
+            </div>
+            <TweakSection label="Try the flow" />
+            <div style={{ fontSize: 11, color: 'rgba(41,38,27,.55)', lineHeight: 1.45 }}>
+              Tap <b style={{ color: '#29261b' }}>Shuffle</b> on Home to load a new chord. Tap any chord pill or saved row to open detail. Tap the <b style={{ color: '#29261b' }}>★</b> to save.
+            </div>
+          </TweaksPanel>
+        </>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
